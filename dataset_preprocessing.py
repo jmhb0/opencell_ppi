@@ -22,7 +22,7 @@ from Bio import Entrez
 import time
 Entrez.email = "jmhb@stanford.edu"
 
-DATA_DIR = Path("data_pre")
+DATA_DIR = Path("data_preprocessed")
 DATA_DIR.mkdir(exist_ok=True, parents=True)
 
 # files to download
@@ -193,8 +193,3 @@ if __name__=="__main__":
 	# get_sequence_representation_language()
 	ipdb.set_trace()
 	pass 
-
-
-
-
-get_sequence_representation_language

@@ -22,12 +22,26 @@ class OpencellPPI(InMemoryDataset):
 		]
 	url_base = "https://opencell.czbiohub.org/data/datasets/"
 
+	processed_files = ["processed.pt"]
+
 	def __init__(self,
 				 root: str,
 				 transform: Optional[Callable] = None,
 				 pre_transform: Optional[Callable] = None,
-				 pre_filter: Optional[Callable] = None):
+				 pre_filter: Optional[Callable] = None,
+				 features_type="dummy",
+				 test_split_method="cite_order",
+				 test_split_frac=0.2,
+				 ):
+		"""
+		test_split_method: ("cite_order","random")
+		features: ("dummy","sequencelanguage","image","sequencelanguage_image")
+		"""
+		self.test_split_method = test_split_method
+		self.test_split_frac = test_split_frac
+		self.features_type = features_type
 		super().__init__(root, transform, pre_transform, pre_filter)
+		self.load(self.processed_paths[0])
 
 	def download(self):
 		# data dir
@@ -54,9 +68,10 @@ class OpencellPPI(InMemoryDataset):
 
 	@property
 	def processed_file_names(self):
-		return []
+		return self.processed_files
 
 	def process(self):
+
 		# start with annotations for protein localization - defines protein indexing
 		fname_localization = f"{self.root}/raw/{self.file_localization_annotation}"
 		df_loc = pd.read_csv(fname_localization, na_filter=False)
@@ -67,10 +82,15 @@ class OpencellPPI(InMemoryDataset):
 		# labels for subcellular localization
 		self.y_loc_nuclear, self.y_loc = self.get_node_labels_localization(df_loc)
 
-		# get the features, depending on the passed options
-		self.features_dummy = torch.ones(len(self.prots))
-		self.features_sequence = self.get_features_sequence()
-		self.features_image = self.get_features_image()
+		# get the features
+		if self.features_type=="dummy":
+			self.features = torch.ones((len(self.prots),5))
+
+		else:
+			raise NotImplementedError()
+			# other options are ("dummy","sequencelanguage","image","sequencelanguage_image") 
+			self.features_sequence = self.get_features_sequence()
+			self.features_image = self.get_features_image()
 
 		# get edges: the interaction data 
 		df_interact = pd.read_csv(f"{self.root}/raw/{self.file_interactions}")
@@ -81,20 +101,36 @@ class OpencellPPI(InMemoryDataset):
 				edge_lst.append([self.prot_to_idx[prot0], self.prot_to_idx[prot1]])
 		self.edge_index = torch.from_numpy(np.stack(edge_lst)).swapaxes(1,0)
 
+		# generate train mask. Random or by ordering the proteins by pubmed cites
+		if self.test_split_method == "random":
+			idxs = torch.randperm(len(self.prots))
+			idxs_test = idxs[:int(self.test_split_frac*len(self.prots))]
+
+		elif self.test_split_method == "cite_order":
+			self.pubmed_cite_order_norm = self.get_protein_ordering()
+			idxs_test = torch.where(self.pubmed_cites_order_norm<=self.test_split_frac)[0]
+
+		else:
+			raise ValueError("test_split_method must be one of ()'cite_order','random")
+
+		self.train_mask = torch.ones(len(self.prots))
+		self.train_mask[idxs_test] = 0
+		self.test_mask = 1-self.train_mask
+
 		# create a list of data objects 
-		data_list = [Data(x=x, edge_index=edge_index)]
+		data_list = [Data(x=self.features, edge_index=self.edge_index, 
+			train_mask=self.train_mask, test_mask=self.test_mask, 
+			y_loc_nuclear=self.y_loc_nuclear, y_loc=self.y_loc,
+			)]
 
-		# boilerplate filtering 
-		if self.pre_filter is not None:
-			data_list = [data for data in data_list if self.pre_filter(data)]
+		# # boilerplate stuff  
+		# if self.pre_filter is not None:
+		# 	data_list = [data for data in data_list if self.pre_filter(data)]
 
-		if self.pre_transform is not None:
-			data_list = [self.pre_transform(data) for data in data_list]
-
-		## this was also in  https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_dataset.html 
-		# data, slices = self.collate(data_list)
-		# torch.save((data, slices), self.processed_paths[0])
-		# return data_list 
+		# if self.pre_transform is not None:
+		# 	data_list = [self.pre_transform(data) for data in data_list]
+		
+		self.save(data_list, self.processed_paths[0])
 
 	def get_node_labels_localization(self, df_loc):
 		""" 
@@ -134,19 +170,44 @@ class OpencellPPI(InMemoryDataset):
 		return y_loc_nuclear, y_loc
 	
 	def get_features_sequence(self):
-		""" """
-		return None
+		""" 
+		From file, generate a list of sequences and an array of representations 
+		derived from a protein language model. 
+		"""
+		
+		file_protein_sequences = f"{self.root}/raw/protein_sequences.pt"
+		lookup_protein_sequences = torch.load(file_protein_sequences)
+		self.sequences = [lookup_protein_sequences.get(p,"") for p in self.prots]
+		
+		file_sequence_representations = f"{self.root}/raw/sequence_representations.pt"
+		self.sequence_representations = torch.load(file_sequence_representations)
 
 	def get_features_image(self):
 		""" """
-		return None
+		pass 
 
+	def get_protein_ordering(self):
+		""" 
+		Assign a rank ordering, and a normalized rank orderings to each of protein.
+		This is based on data that we import that was previously calculated in 
+		the `dataset_preprocessing.py` func. 
+		"""
+		file_pubmed_cites = f"{self.root}/raw/prot_pubmed_counts.pt"
+		lookup_pubmed_cites = torch.load(file_pubmed_cites)
+		self.pubmed_cites = torch.tensor([lookup_pubmed_cites[p] for p in self.prots])
+		# get the rank ordering 
+		sorted_indices = sorted(range(len(self.pubmed_cites)), 
+			key=lambda x: self.pubmed_cites[x])
+		self.pubmed_cites_order = torch.zeros(len(sorted_indices))
+		for rank, index in enumerate(sorted_indices):
+			self.pubmed_cites_order[index] = rank
 
+		self.pubmed_cites_order_norm = self.pubmed_cites_order / self.pubmed_cites_order.max()
 
+		return self.pubmed_cites_order_norm
 
 
 if __name__ == "__main__":
 	dataset = OpencellPPI(root="data")
-
 	ipdb.set_trace()
 	pass
