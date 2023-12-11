@@ -4,7 +4,7 @@ import torch
 import ipdb 
 
 def train(model, data, train_idx, optimizer, loss_fn):
-	""" train one step """
+	""" train one step of a PYG graph model """
 	model.train()
 	loss = 0
 	optimizer.zero_grad()
@@ -35,7 +35,6 @@ if __name__=="__main__":
 		num_layers=3, dropout=0.2)
 	model.reset_parameters()
 	model.cuda()
-
 
 	optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 	loss_fn = torch.nn.BCEWithLogitsLoss()
