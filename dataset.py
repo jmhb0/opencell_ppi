@@ -32,6 +32,7 @@ class OpencellPPI(InMemoryDataset):
         features_type="dummy",
         test_split_method="cite_order",
         test_split_frac=0.2,
+        random_seed=0,
     ):
         """
 		test_split_method: ("cite_order","random")
@@ -44,6 +45,7 @@ class OpencellPPI(InMemoryDataset):
 
         self.load(self.processed_paths[0])
 
+        ## choose the input features
         if self.features_type == "dummy":
             self._data.x = self._data.dummy_features
         elif self.features_type == "sequencelanguage":
@@ -52,7 +54,25 @@ class OpencellPPI(InMemoryDataset):
         	self._data.x = self._data.features_image
         elif self.features_type == "sequencelanguage_image":
         	raise NotImplementedError("define fusion")
-        pass
+
+        ## generate train mask. Random or by ordering the proteins by pubmed cites
+        if self.test_split_method == "random":
+            torch.manual_seed(random_seed)
+            idxs = torch.randperm(len(self.prots))
+            idxs_test = idxs[:int(self.test_split_frac * len(self._data.prots))]
+
+        elif self.test_split_method == "cite_order":
+            
+            idxs_test = torch.where(
+                self._data.pubmed_cites_order_norm <= self.test_split_frac)[0]
+        else:
+            raise ValueError(
+                "test_split_method must be one of ()'cite_order','random")
+        self.train_mask = torch.ones(len(self.prots))
+        self.train_mask[idxs_test] = 0
+        self.test_mask = 1 - self.train_mask
+        self._data.train_mask = self.train_mask
+        self._data.test_mask = self.test_mask
 
     def download(self):
         # data dir
@@ -108,23 +128,7 @@ class OpencellPPI(InMemoryDataset):
                     [self.prot_to_idx[prot0], self.prot_to_idx[prot1]])
         self.edge_index = torch.from_numpy(np.stack(edge_lst)).swapaxes(1, 0)
 
-        # generate train mask. Random or by ordering the proteins by pubmed cites
-        if self.test_split_method == "random":
-            idxs = torch.randperm(len(self.prots))
-            idxs_test = idxs[:int(self.test_split_frac * len(self.prots))]
-
-        elif self.test_split_method == "cite_order":
-            self.pubmed_cite_order_norm = self.get_protein_ordering()
-            idxs_test = torch.where(
-                self.pubmed_cites_order_norm <= self.test_split_frac)[0]
-
-        else:
-            raise ValueError(
-                "test_split_method must be one of ()'cite_order','random")
-
-        self.train_mask = torch.ones(len(self.prots))
-        self.train_mask[idxs_test] = 0
-        self.test_mask = 1 - self.train_mask
+        self.pubmed_cite_order_norm = self.get_protein_ordering()
 
         # create a list of data objects
         data_list = [
@@ -133,11 +137,12 @@ class OpencellPPI(InMemoryDataset):
                  features_sequence=self.features_sequence,
                  features_image=self.features_image,
                  edge_index=self.edge_index,
-                 train_mask=self.train_mask,
-                 test_mask=self.test_mask,
                  y_loc_nuclear=self.y_loc_nuclear,
                  y_loc=self.y_loc,
-                 id_to_loc=self.id_to_loc)
+                 id_to_loc=self.id_to_loc,
+                 pubmed_cites_order_norm=self.pubmed_cites_order_norm,
+                 prots=self.prots,
+                 )
         ]
 
 
