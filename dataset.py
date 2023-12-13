@@ -1,13 +1,16 @@
+import ipdb
+
 from torch_geometric.data import Data, InMemoryDataset
 from typing import Callable, List, Optional
 import os
 import requests
-import ipdb
 import pandas as pd
 import torch
 import numpy as np
 from pathlib import Path
 import tqdm
+import gdown
+import zipfile
 
 class OpencellPPI(InMemoryDataset):
     file_metadata = "opencell-library-metadata.csv"
@@ -15,11 +18,13 @@ class OpencellPPI(InMemoryDataset):
     file_interactions_readme = "opencell-protein-interactions-readme.csv"
     file_localization_annotation = "opencell-localization-annotations.csv"
     file_localization_annotation_readme = "opencell-localization-annotations-readme.csv"
+    file_data_preprocessing = "data_preprocessed.zip"
     raw_files = [
         file_metadata, file_interactions, file_interactions_readme,
         file_localization_annotation, file_localization_annotation_readme
     ]
     url_base = "https://opencell.czbiohub.org/data/datasets/"
+    url_preprocessed = "https://drive.google.com/uc?id=1f_S3c4S3QdSdJSTvnjy710WxMIYwnBjw"
 
     processed_files = ["processed.pt"]
 
@@ -92,6 +97,12 @@ class OpencellPPI(InMemoryDataset):
                 raise (
                     f"Failed to download {file_path} with status code {response.status_code}"
                 )
+
+        # get the preprocessed data files from google drive
+        preprocessed_output = f'data/raw/{self.file_data_preprocessing}'
+        gdown.download(self.url_preprocessed, preprocessed_output, fuzzy=True)
+        with zipfile.ZipFile(preprocessed_output, 'r', zipfile.ZIP_DEFLATED) as zip_ref:
+            zip_ref.extractall("data/raw")
 
     @property
     def raw_file_names(self):
