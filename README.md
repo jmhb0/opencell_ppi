@@ -1,5 +1,7 @@
 Code for [this blog post](https://medium.com/@jamesmhburgess1/protein-interaction-network-prediction-in-opencell-with-graph-neural-nets-20bf739c2971) as part of the cs224w class on machine learning on graphs. There is also a [Colab version](https://colab.research.google.com/drive/1gmU0_-__qHqJo-dEcz_v1GVl7nLEjpT0) of the code.
 
+The project does prediction of protein localization in the [Opencell Dtaaset](https://opencell.czbiohub.org/). It uses graph ML methods over the protein interaction graph in OpenCell. We experiment with using image and sequence representations for the proteins. 
+
 ## Setup:
 ```
 pip install fair-esm biopython torch sklearn pandas torch torch_geometric scikit-learn
