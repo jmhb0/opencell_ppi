@@ -362,7 +362,6 @@ if __name__ == "__main__":
 	model_name = 'gcn-conv'  # ('linear','mlp','gcn-conv','gcn-sage','gcn-gat','gcn-gin','gcn-transformer')
 	model_name = 'linear'  # ('linear','mlp','gcn-conv','gcn-sage','gcn-gat','gcn-gin','gcn-transformer')
 	task = "organelle_nuclear"  # ("organelle_nuclear", "organelle_multiclass")
-	task = "organelle_multiclass"  # ("organelle_nuclear", "organelle_multiclass")
 	n_steps = 1000  # 10000
 	test_split_method = "cite_order"  # ("random","cite_order")
 	# test_split_method = "random"  # ("random","cite_order")
